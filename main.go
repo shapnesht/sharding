@@ -17,6 +17,7 @@ import (
 )
 
 type Response struct {
+	Url      string `json:"url"`
 	ShortUrl string `json:"shortUrl"`
 }
 
@@ -43,8 +44,11 @@ func handlePostUrl(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	response := Response{
 		ShortUrl: stringHash[0:5],
+		Url:      url,
 	}
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, `{"error":"failed to encode JSON"}`, http.StatusInternalServerError)
+	}
 }
 
 func connect(host, dbName, username, password string, port int16) (*pgx.Conn, error) {
