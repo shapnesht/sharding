@@ -1,0 +1,5 @@
+CREATE TABLE Urls(
+    id SERIAL NOT NULL PRIMARY KEY,
+    url TEXT,
+    url_id CHARACTER(5)
+)
