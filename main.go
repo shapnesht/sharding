@@ -7,9 +7,23 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/buraksezer/consistent"
+	"github.com/cespare/xxhash/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
 )
+
+type hasher struct{}
+
+func (h hasher) Sum64(data []byte) uint64 {
+	return xxhash.Sum64(data)
+}
+
+type myMember string
+
+func (m myMember) String() string {
+	return string(m)
+}
 
 func handleGetUrl(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "GET Hello, %q", r.URL.Path)
@@ -29,7 +43,8 @@ func connect(host, dbName, username, password string, port int16) (*pgx.Conn, er
 }
 
 func main() {
-	fmt.Println("Running")
+	fmt.Println("Starting the server....")
+
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Unable to fetch configs")
@@ -40,6 +55,7 @@ func main() {
 	dbUsername := os.Getenv("DB_USERNAME")
 	dbPassword := os.Getenv("DB_PASSWORD")
 
+	fmt.Println("Connecting to DB....")
 	conn1, err1 := connect(host, dbName, dbUsername, dbPassword, 5433)
 	conn2, err2 := connect(host, dbName, dbUsername, dbPassword, 5434)
 	conn3, err3 := connect(host, dbName, dbUsername, dbPassword, 5435)
@@ -47,6 +63,7 @@ func main() {
 	if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
 		log.Fatal("Unable to connect to DB...")
 	}
+	fmt.Println("Connected...")
 
 	connections := map[int]*pgx.Conn{
 		5433: conn1,
@@ -58,6 +75,25 @@ func main() {
 	defer connections[5434].Close(context.Background())
 	defer connections[5435].Close(context.Background())
 	defer connections[5436].Close(context.Background())
+
+	cfg := consistent.Config{
+		PartitionCount:    7,
+		ReplicationFactor: 1,
+		Load:              1.25,
+		Hasher:            hasher{},
+	}
+	c := consistent.New(nil, cfg)
+
+	c.Add(myMember("5433"))
+	c.Add(myMember("5434"))
+	c.Add(myMember("5435"))
+	c.Add(myMember("5436"))
+
+	fmt.Println(c.LocateKey([]byte("hab")))
+	fmt.Println(c.LocateKey([]byte("abc")))
+	fmt.Println(c.LocateKey([]byte("hab")))
+	fmt.Println(c.LocateKey([]byte("abc")))
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
