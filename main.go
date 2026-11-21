@@ -34,16 +34,39 @@ func (m myMember) String() string {
 	return string(m)
 }
 
-func handleGetUrl(w http.ResponseWriter, r *http.Request, c *consistent.Consistent) {
-	fmt.Fprintf(w, "GET Hello, %q", r.URL.Path)
+func handleGetUrl(w http.ResponseWriter, r *http.Request, c *consistent.Consistent, connections map[string]*pgx.Conn) {
+	urlId := r.URL.Path[1:]
+	server := c.LocateKey([]byte(urlId)).String()
+	connections[server].Prepare(context.Background(), "queryShortUrl", "SELECT url, url_id FROM Urls WHERE url_id = $1")
+
+	var resp = Response{
+		Server: server,
+	}
+	err := connections[server].QueryRow(context.Background(), "queryShortUrl", urlId).Scan(&resp.Url, &resp.ShortUrl)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			http.Error(w, `{"error":"Short url doesn't exists"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"error finding url from DB"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, `{"error":"failed to encode JSON"}`, http.StatusInternalServerError)
+	}
 }
 
-func handlePostUrl(w http.ResponseWriter, r *http.Request, c *consistent.Consistent) {
+func handlePostUrl(w http.ResponseWriter, r *http.Request, c *consistent.Consistent, connections map[string]*pgx.Conn) {
 	url := r.URL.Query().Get("url")
 	hash := sha256.Sum256([]byte(url))
 	shortUrl := hex.EncodeToString(hash[:])[0:5]
 	w.Header().Set("Content-Type", "application/json")
 	server := c.LocateKey([]byte(shortUrl)).String()
+	connections[server].Prepare(context.Background(), "insertNewUrl", "INSERT INTO Urls(url, url_id) VALUES($1, $2)")
+	_, err := connections[server].Query(context.Background(), "insertNewUrl", url, shortUrl)
+	if err != nil {
+		http.Error(w, `{"error":"failed to save to DB"}`, http.StatusInternalServerError)
+	}
 	response := Response{
 		ShortUrl: shortUrl,
 		Url:      url,
@@ -86,16 +109,16 @@ func main() {
 	}
 	fmt.Println("Connected...")
 
-	connections := map[int]*pgx.Conn{
-		5433: conn1,
-		5434: conn2,
-		5435: conn3,
-		5436: conn4,
+	connections := map[string]*pgx.Conn{
+		"5433": conn1,
+		"5434": conn2,
+		"5435": conn3,
+		"5436": conn4,
 	}
-	defer connections[5433].Close(context.Background())
-	defer connections[5434].Close(context.Background())
-	defer connections[5435].Close(context.Background())
-	defer connections[5436].Close(context.Background())
+	defer connections["5433"].Close(context.Background())
+	defer connections["5434"].Close(context.Background())
+	defer connections["5435"].Close(context.Background())
+	defer connections["5436"].Close(context.Background())
 
 	cfg := consistent.Config{
 		PartitionCount:    7,
@@ -113,9 +136,9 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			handleGetUrl(w, r, c)
+			handleGetUrl(w, r, c, connections)
 		case http.MethodPost:
-			handlePostUrl(w, r, c)
+			handlePostUrl(w, r, c, connections)
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
