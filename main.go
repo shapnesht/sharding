@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +15,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
 )
+
+type Response struct {
+	ShortUrl string `json:"shortUrl"`
+}
 
 type hasher struct{}
 
@@ -30,7 +37,14 @@ func handleGetUrl(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePostUrl(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "POST Hello, %q", r.URL.Path)
+	url := r.URL.Query().Get("url")
+	hash := sha256.Sum256([]byte(url))
+	stringHash := hex.EncodeToString(hash[:])
+	w.Header().Set("Content-Type", "application/json")
+	response := Response{
+		ShortUrl: stringHash[0:5],
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func connect(host, dbName, username, password string, port int16) (*pgx.Conn, error) {
@@ -88,11 +102,6 @@ func main() {
 	c.Add(myMember("5434"))
 	c.Add(myMember("5435"))
 	c.Add(myMember("5436"))
-
-	fmt.Println(c.LocateKey([]byte("hab")))
-	fmt.Println(c.LocateKey([]byte("abc")))
-	fmt.Println(c.LocateKey([]byte("hab")))
-	fmt.Println(c.LocateKey([]byte("abc")))
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
