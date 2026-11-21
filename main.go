@@ -19,6 +19,7 @@ import (
 type Response struct {
 	Url      string `json:"url"`
 	ShortUrl string `json:"shortUrl"`
+	Server   string `json:"server"`
 }
 
 type hasher struct{}
@@ -33,18 +34,20 @@ func (m myMember) String() string {
 	return string(m)
 }
 
-func handleGetUrl(w http.ResponseWriter, r *http.Request) {
+func handleGetUrl(w http.ResponseWriter, r *http.Request, c *consistent.Consistent) {
 	fmt.Fprintf(w, "GET Hello, %q", r.URL.Path)
 }
 
-func handlePostUrl(w http.ResponseWriter, r *http.Request) {
+func handlePostUrl(w http.ResponseWriter, r *http.Request, c *consistent.Consistent) {
 	url := r.URL.Query().Get("url")
 	hash := sha256.Sum256([]byte(url))
-	stringHash := hex.EncodeToString(hash[:])
+	shortUrl := hex.EncodeToString(hash[:])[0:5]
 	w.Header().Set("Content-Type", "application/json")
+	server := c.LocateKey([]byte(shortUrl)).String()
 	response := Response{
-		ShortUrl: stringHash[0:5],
+		ShortUrl: shortUrl,
 		Url:      url,
+		Server:   server,
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, `{"error":"failed to encode JSON"}`, http.StatusInternalServerError)
@@ -110,9 +113,9 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			handleGetUrl(w, r)
+			handleGetUrl(w, r, c)
 		case http.MethodPost:
-			handlePostUrl(w, r)
+			handlePostUrl(w, r, c)
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
