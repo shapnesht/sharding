@@ -1,0 +1,61 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "URL shortner + Sharding",
+        "description": "",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "http://localhost:8080"
+        }
+    ],
+    "tags": [],
+    "paths": {
+        "/bde4f": {
+            "get": {
+                "summary": "Get Url",
+                "tags": [
+                    "default"
+                ],
+                "description": " ",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "Successful operation"
+                    }
+                }
+            }
+        },
+        "/shard1": {
+            "post": {
+                "summary": "Create Short Url",
+                "tags": [
+                    "default"
+                ],
+                "description": " ",
+                "parameters": [
+                    {
+                        "name": "url",
+                        "in": "query",
+                        "required": false,
+                        "description": "url",
+                        "schema": {
+                            "type": "string",
+                            "example": "shapnesht.you"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful operation"
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {},
+        "securitySchemes": {}
+    }
+}
