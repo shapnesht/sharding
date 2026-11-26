@@ -26,7 +26,12 @@ POST /?url=<long-url>
 
 | File | Purpose |
 |---|---|
-| [main.go](main.go) | HTTP server, shard connections, consistent hash ring |
+| [main.go](main.go) | Wiring only: config, shard connections, ring, HTTP server |
+| [internal/config](internal/config) | Loads `.env` into a `Config` |
+| [internal/shard](internal/shard) | Consistent-hash ring and shard connections |
+| [internal/store](internal/store) | SQL for the `Urls` table |
+| [internal/shortener](internal/shortener) | Short id from a URL (SHA-256, first 5 hex chars) |
+| [internal/handler](internal/handler) | HTTP handlers and routes |
 | [Dockerfile](Dockerfile) | `postgres` image with `init.sql` baked in, used for every shard |
 | [init.sql](init.sql) | Creates the `Urls` table on first start of a shard |
 | `.env` | Database settings (not committed) |
@@ -96,7 +101,7 @@ curl -X POST "http://localhost:8080/?url=https://example.com/some/long/path"
 
 ### Resolve a short URL
 
-`GET /{shortUrl}` is **not implemented yet**. The route and the lookup are still being built.
+`GET /{shortUrl}` looks the short id up on its shard and returns the same JSON shape as POST, or 404 if it does not exist.
 
 ## Resetting the shards
 
@@ -108,7 +113,7 @@ podman rm -f -v pgshard1 pgshard2 pgshard3 pgshard4
 
 ## Known limitations
 
-- No `GET /{shortUrl}` redirect yet.
+- `GET /{shortUrl}` returns JSON; it does not redirect.
 - Shard ports and the shard list are hard-coded in [main.go](main.go).
 - Each shard uses a single connection, which is not safe for concurrent requests. A pool (`pgxpool`) would fix this.
 - There is no unique constraint on `url_id`, so a hash collision or a repeated URL inserts a duplicate row.
